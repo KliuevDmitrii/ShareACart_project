@@ -3,6 +3,7 @@ import requests
 import csv
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+import mimetypes
 
 # --- load .env (локально), в GitHub Actions переменные придут из secrets ---
 load_dotenv()
@@ -86,35 +87,71 @@ def get_vendor(issue):
 
 
 def upload_file_to_slack(filepath):
-    """Send CSV file using Slack files.uploadV2 API (correct multipart body)."""
+    """Upload file to Slack using files.getUploadURLExternal + files.completeUploadExternal."""
 
     if not SLACK_TOKEN or not SLACK_CHANNEL:
-        print("⚠️ Slack not configured, skipping upload.")
+        print("⚠️ Slack is not configured. Skipping upload.")
         return
 
-    url = "https://slack.com/api/files.uploadV2"
+    filename = os.path.basename(filepath)
+    mimetype = mimetypes.guess_type(filepath)[0] or "text/csv"
 
-    with open(filepath, "rb") as f:
-        multipart_form_data = {
-            "file": (os.path.basename(filepath), f, "text/csv"),
-            "channels": (None, SLACK_CHANNEL),
-            "filename": (None, os.path.basename(filepath)),
-            "title": (None, os.path.basename(filepath)),
-            "initial_comment": (None, f"Sentry vendors report {start_str}–{end_str}")
+    # === STEP 1: get upload URL ===
+    get_url_resp = requests.post(
+        "https://slack.com/api/files.getUploadURLExternal",
+        headers={
+            "Authorization": f"Bearer {SLACK_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "filename": filename,
+            "length": os.path.getsize(filepath)
         }
+    ).json()
 
-        response = requests.post(
-            url,
-            headers={"Authorization": f"Bearer {SLACK_TOKEN}"},
-            files=multipart_form_data
+    if not get_url_resp.get("ok"):
+        print("❌ Slack getUploadURLExternal failed:", get_url_resp)
+        return
+
+    upload_url = get_url_resp["upload_url"]
+    file_id = get_url_resp["file_id"]
+
+    # === STEP 2: upload file to S3 ===
+    with open(filepath, "rb") as f:
+        upload_resp = requests.put(
+            upload_url,
+            data=f,
+            headers={
+                "Content-Type": mimetype
+            }
         )
 
-    data = response.json()
+    if upload_resp.status_code != 200:
+        print(f"❌ Slack S3 upload failed: HTTP {upload_resp.status_code}")
+        return
 
-    if not data.get("ok"):
-        print("❌ Slack upload failed:", data)
+    # === STEP 3: complete upload ===
+    complete_resp = requests.post(
+        "https://slack.com/api/files.completeUploadExternal",
+        headers={
+            "Authorization": f"Bearer {SLACK_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "files": [
+                {
+                    "id": file_id,
+                    "title": filename
+                }
+            ],
+            "channels": SLACK_CHANNEL
+        }
+    ).json()
+
+    if not complete_resp.get("ok"):
+        print("❌ Slack completeUploadExternal failed:", complete_resp)
     else:
-        print("✅ Report successfully sent to Slack via files.uploadV2.")
+        print("✅ File successfully uploaded to Slack using uploadURLExternal!")
 
 
 
