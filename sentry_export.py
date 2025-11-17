@@ -86,27 +86,30 @@ def get_vendor(issue):
 
 
 def upload_file_to_slack(filepath):
-    """Send CSV file to Slack channel using files.upload."""
+    """Send CSV file to Slack channel (files.uploadV2)."""
     if not SLACK_TOKEN or not SLACK_CHANNEL:
         print("⚠️ Slack not configured, skipping upload.")
         return
 
     with open(filepath, "rb") as f:
-        resp = requests.post(
-            "https://slack.com/api/files.upload",
+        response = requests.post(
+            "https://slack.com/api/files.uploadV2",
             headers={"Authorization": f"Bearer {SLACK_TOKEN}"},
+            files={"file": f},
             data={
                 "channels": SLACK_CHANNEL,
-                "initial_comment": f"Sentry vendors report {start_str}–{end_str}"
-            },
-            files={"file": (os.path.basename(filepath), f, "text/csv")}
+                "initial_comment": f"Sentry vendors report {start_str}–{end_str}",
+                "filename": os.path.basename(filepath),
+                "title": os.path.basename(filepath),
+            }
         )
 
-    data = resp.json()
-    if not data.get("ok"):
-        print("❌ Slack upload failed:", data)
+    result = response.json()
+    if not result.get("ok"):
+        print("❌ Slack upload failed:", result)
     else:
-        print("✅ Report sent to Slack.")
+        print("✅ Report sent to Slack via files.uploadV2.")
+
 
 
 # --- aggregate ---
