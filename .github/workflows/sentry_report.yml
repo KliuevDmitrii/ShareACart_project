@@ -30,38 +30,31 @@ jobs:
         run: python sentry_export.py
 
       - name: Upload artifact
-        id: artifact-upload
         uses: actions/upload-artifact@v4
         with:
           name: sentry-report
           path: report/
 
-      #  ======== NEW STEP =========
-      - name: Get artifact download URL
-        id: get-url
-        run: |
-          ARTIFACT_ID=$(gh api \
-            repos/${{ github.repository }}/actions/artifacts \
-            --jq '.artifacts[0].id')
-          
-          DOWNLOAD_URL=$(gh api \
-            repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip \
-            --method GET \
-            --silent \
-            --header "Accept: application/vnd.github+json" \
-            --jq '.url')
-
-          echo "download_url=https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" >> $GITHUB_OUTPUT
+      - name: Get artifact ID
+        id: artifact-id
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ARTIFACT_ID=$(gh api repos/${{ github.repository }}/actions/artifacts --jq '.artifacts[0].id')
+          echo "id=$ARTIFACT_ID" >> $GITHUB_OUTPUT
+
+      - name: Build artifact download URL
+        id: build-url
+        run: |
+          echo "url=https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${{ steps.artifact-id.outputs.id }}/zip" >> $GITHUB_OUTPUT
 
       - name: Send Slack notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          REPORT_URL: ${{ steps.get-url.outputs.download_url }}
+          REPORT_URL: ${{ steps.build-url.outputs.url }}
         run: |
           curl -X POST -H "Content-type: application/json" \
           --data "{
-            \"text\": \"📊 *Weekly Sentry Report Ready* \n📁 Download CSV:\n${REPORT_URL}\"
+            \"text\": \"📊 *Weekly Sentry Report Ready*\n📁 Download report:\n${REPORT_URL}\"
           }" \
           $SLACK_WEBHOOK_URL
