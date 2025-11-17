@@ -2,11 +2,12 @@ name: Weekly Sentry Report
 
 on:
   schedule:
-    - cron: "0 8 * * MON"   # 12:00 Тбилиси
+    # 12:00 Тбилиси (UTC+4 → 08:00 UTC)
+    - cron: "0 8 * * MON"
   workflow_dispatch: {}
 
 permissions:
-  contents: write   # ✨ важнейшая строка
+  contents: write   # allows creating and deleting releases
 
 jobs:
   sentry-report:
@@ -32,38 +33,73 @@ jobs:
           SENTRY_QUERY: ${{ secrets.SENTRY_QUERY }}
         run: python sentry_export.py
 
-      - name: Create Release
+      # ===========================
+      # FIND GENERATED CSV
+      # ===========================
+      - name: Find generated CSV file
+        id: find_csv
+        run: |
+          FILE_PATH=$(ls report/sentry_report_*.csv | head -n 1)
+          echo "file=$FILE_PATH" >> $GITHUB_OUTPUT
+          echo "Found file: $FILE_PATH"
+
+      # ===========================
+      # DELETE OLD RELEASES
+      # ===========================
+      - name: Delete old releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASES=$(gh release list --limit 100 --json tagName --jq '.[].tagName')
+          for TAG in $RELEASES; do
+            echo "Deleting old release: $TAG"
+            gh release delete "$TAG" --yes
+          done
+
+      # ===========================
+      # CREATE NEW RELEASE
+      # ===========================
+      - name: Create new release
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: "sentry-report-${{ github.run_id }}"
-          release_name: "Sentry Report ${{ github.run_id }}"
+          release_name: "Sentry Report – ${{ github.run_id }}"
           draft: false
           prerelease: false
 
+      # ===========================
+      # UPLOAD RELEASE ASSET
+      # ===========================
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: report/sentry_report_*.csv
+          asset_path: ${{ steps.find_csv.outputs.file }}
           asset_name: sentry_report.csv
           asset_content_type: text/csv
 
+      # ===========================
+      # BUILD PUBLIC DOWNLOAD URL
+      # ===========================
       - name: Build URL to CSV
-        id: report-url
+        id: report_url
         run: |
           echo "url=https://github.com/${{ github.repository }}/releases/download/sentry-report-${{ github.run_id }}/sentry_report.csv" >> $GITHUB_OUTPUT
 
+      # ===========================
+      # SEND MESSAGE TO SLACK
+      # ===========================
       - name: Send Slack notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          REPORT_URL: ${{ steps.report-url.outputs.url }}
+          REPORT_URL: ${{ steps.report_url.outputs.url }}
         run: |
-          curl -X POST -H 'Content-type: application/json' \
+          curl -X POST -H "Content-type: application/json" \
           --data "{
             \"text\": \"📊 *Weekly Sentry Report Ready*\n📁 Download CSV:\n${REPORT_URL}\"
           }" \
