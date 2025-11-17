@@ -86,29 +86,36 @@ def get_vendor(issue):
 
 
 def upload_file_to_slack(filepath):
-    """Send CSV file to Slack channel (files.uploadV2)."""
+    """Send CSV file using Slack files.uploadV2 API (correct multipart body)."""
+
     if not SLACK_TOKEN or not SLACK_CHANNEL:
         print("⚠️ Slack not configured, skipping upload.")
         return
 
+    url = "https://slack.com/api/files.uploadV2"
+
     with open(filepath, "rb") as f:
+        multipart_form_data = {
+            "file": (os.path.basename(filepath), f, "text/csv"),
+            "channels": (None, SLACK_CHANNEL),
+            "filename": (None, os.path.basename(filepath)),
+            "title": (None, os.path.basename(filepath)),
+            "initial_comment": (None, f"Sentry vendors report {start_str}–{end_str}")
+        }
+
         response = requests.post(
-            "https://slack.com/api/files.uploadV2",
+            url,
             headers={"Authorization": f"Bearer {SLACK_TOKEN}"},
-            files={"file": f},
-            data={
-                "channels": SLACK_CHANNEL,
-                "initial_comment": f"Sentry vendors report {start_str}–{end_str}",
-                "filename": os.path.basename(filepath),
-                "title": os.path.basename(filepath),
-            }
+            files=multipart_form_data
         )
 
-    result = response.json()
-    if not result.get("ok"):
-        print("❌ Slack upload failed:", result)
+    data = response.json()
+
+    if not data.get("ok"):
+        print("❌ Slack upload failed:", data)
     else:
-        print("✅ Report sent to Slack via files.uploadV2.")
+        print("✅ Report successfully sent to Slack via files.uploadV2.")
+
 
 
 
