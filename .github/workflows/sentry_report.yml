@@ -2,21 +2,27 @@ name: Weekly Sentry Report
 
 on:
   schedule:
-    # 12:00 Тбилиси (UTC+4 → 08:00 UTC)
+    # 12:00 Tbilisi = 08:00 UTC
     - cron: "0 8 * * MON"
   workflow_dispatch: {}
 
 permissions:
-  contents: write   # allows creating and deleting releases
+  contents: write   # required for creating & deleting releases
 
 jobs:
   sentry-report:
     runs-on: ubuntu-latest
 
     steps:
+      # ===========================
+      # CHECKOUT
+      # ===========================
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # ===========================
+      # PYTHON SETUP
+      # ===========================
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -25,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # ===========================
+      # GENERATE CSV REPORT
+      # ===========================
       - name: Generate Sentry CSV report
         env:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -34,7 +43,7 @@ jobs:
         run: python sentry_export.py
 
       # ===========================
-      # FIND GENERATED CSV
+      # FIND GENERATED CSV FILE
       # ===========================
       - name: Find generated CSV file
         id: find_csv
@@ -71,7 +80,7 @@ jobs:
           prerelease: false
 
       # ===========================
-      # UPLOAD RELEASE ASSET
+      # UPLOAD ASSET TO RELEASE
       # ===========================
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -92,15 +101,45 @@ jobs:
           echo "url=https://github.com/${{ github.repository }}/releases/download/sentry-report-${{ github.run_id }}/sentry_report.csv" >> $GITHUB_OUTPUT
 
       # ===========================
-      # SEND MESSAGE TO SLACK
+      # SEND SLACK BLOCK KIT MESSAGE
       # ===========================
-      - name: Send Slack notification
+      - name: Send Slack notification (Block Kit)
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           REPORT_URL: ${{ steps.report_url.outputs.url }}
         run: |
-          curl -X POST -H "Content-type: application/json" \
+          curl -X POST -H 'Content-type: application/json' \
           --data "{
-            \"text\": \"📊 *Weekly Sentry Report Ready*\n📁 Download CSV:\n${REPORT_URL}\"
+            \"blocks\": [
+              {
+                \"type\": \"header\",
+                \"text\": {
+                  \"type\": \"plain_text\",
+                  \"text\": \"📊 Weekly Sentry Report\"
+                }
+              },
+              {
+                \"type\": \"section\",
+                \"text\": {
+                  \"type\": \"mrkdwn\",
+                  \"text\": \"Your weekly Sentry error report is ready.\"
+                }
+              },
+              {
+                \"type\": \"actions\",
+                \"elements\": [
+                  {
+                    \"type\": \"button\",
+                    \"text\": {
+                      \"type\": \"plain_text\",
+                      \"text\": \"⬇️ Download CSV\"
+                    },
+                    \"url\": \"${REPORT_URL}\",
+                    \"style\": \"primary\"
+                  }
+                ]
+              }
+            ]
           }" \
           $SLACK_WEBHOOK_URL
+
