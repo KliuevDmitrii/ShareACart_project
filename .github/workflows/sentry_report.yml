@@ -2,7 +2,7 @@ name: Weekly Sentry Report
 
 on:
   schedule:
-    - cron: "0 8 * * MON"   # 12:00 Тбилиси (UTC+4)
+    - cron: "0 8 * * MON"   # 12:00 Тбилиси
   workflow_dispatch: {}
 
 jobs:
@@ -29,29 +29,39 @@ jobs:
           SENTRY_QUERY: ${{ secrets.SENTRY_QUERY }}
         run: python sentry_export.py
 
-      - name: Upload artifact (CSV Report)
+      - name: Upload artifact
+        id: artifact-upload
         uses: actions/upload-artifact@v4
         with:
           name: sentry-report
           path: report/
 
-      - name: Resolve artifact download URL
-        id: artifact
-        uses: actions/upload-artifact/resolve-download-url@v1
-        with:
-          name: sentry-report
+      #  ======== NEW STEP =========
+      - name: Get artifact download URL
+        id: get-url
+        run: |
+          ARTIFACT_ID=$(gh api \
+            repos/${{ github.repository }}/actions/artifacts \
+            --jq '.artifacts[0].id')
+          
+          DOWNLOAD_URL=$(gh api \
+            repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip \
+            --method GET \
+            --silent \
+            --header "Accept: application/vnd.github+json" \
+            --jq '.url')
+
+          echo "download_url=https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Slack notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          REPORT_URL: ${{ steps.artifact.outputs.download_url }}
+          REPORT_URL: ${{ steps.get-url.outputs.download_url }}
         run: |
           curl -X POST -H "Content-type: application/json" \
           --data "{
-            \"text\": \"📊 *Weekly Sentry Report Ready*\n📁 Download CSV:\n${REPORT_URL}\"
+            \"text\": \"📊 *Weekly Sentry Report Ready* \n📁 Download CSV:\n${REPORT_URL}\"
           }" \
           $SLACK_WEBHOOK_URL
-
-
-
-
