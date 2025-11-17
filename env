@@ -4,5 +4,5 @@ SENTRY_TOKEN=xxxx
 
 SENTRY_QUERY=your_query
 
-SLACK_TOKEN=slack_token
-SLACK_CHANNEL=your_channel
+SLACK_WEBHOOK_URL=...
+
