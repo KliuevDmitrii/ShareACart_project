@@ -1,0 +1,33 @@
+name: Sentry weekly report
+
+on:
+  schedule:
+    # Каждый понедельник в 08:00 UTC = 12:00 по Тбилиси
+    - cron: "0 8 * * MON"
+  workflow_dispatch: {}  # возможность запустить вручную из UI
+
+jobs:
+  sentry-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Sentry report script
+        env:
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_TOKEN: ${{ secrets.SENTRY_TOKEN }}
+          SENTRY_QUERY: ${{ secrets.SENTRY_QUERY }}
+          SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+        run: python sentry_export.py

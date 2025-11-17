@@ -1,0 +1,8 @@
+SENTRY_ORG=share-a-cart
+SENTRY_PROJECT=extension
+SENTRY_TOKEN=xxxx
+
+SENTRY_QUERY=your_query
+
+SLACK_TOKEN=slack_token
+SLACK_CHANNEL=your_channel
