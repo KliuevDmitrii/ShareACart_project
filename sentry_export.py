@@ -102,7 +102,7 @@ def upload_file_to_slack(filepath):
         headers={
             "Authorization": f"Bearer {SLACK_TOKEN}",
             # Slack REQUIRES charset=utf-8
-            "Content-Type": "application/json; charset=utf-8"
+            "Content-Type": "application/json;charset=utf-8"
         },
         json={
             "filename": filename_only,
@@ -138,7 +138,7 @@ def upload_file_to_slack(filepath):
         "https://slack.com/api/files.completeUploadExternal",
         headers={
             "Authorization": f"Bearer {SLACK_TOKEN}",
-            "Content-Type": "application/json; charset=utf-8"
+            "Content-Type": "application/json;charset=utf-8"
         },
         json={
             "files": [
