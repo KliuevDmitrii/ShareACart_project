@@ -5,6 +5,9 @@ on:
     - cron: "0 8 * * MON"   # 12:00 Тбилиси
   workflow_dispatch: {}
 
+permissions:
+  contents: write   # ✨ важнейшая строка
+
 jobs:
   sentry-report:
     runs-on: ubuntu-latest
@@ -21,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Generate report
+      - name: Generate Sentry CSV report
         env:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
@@ -35,9 +38,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: sentry-report-${{ github.run_id }}
+          tag_name: "sentry-report-${{ github.run_id }}"
           release_name: "Sentry Report ${{ github.run_id }}"
-          body: "Weekly Sentry Errors Report"
           draft: false
           prerelease: false
 
@@ -56,7 +58,7 @@ jobs:
         run: |
           echo "url=https://github.com/${{ github.repository }}/releases/download/sentry-report-${{ github.run_id }}/sentry_report.csv" >> $GITHUB_OUTPUT
 
-      - name: Send Slack message
+      - name: Send Slack notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           REPORT_URL: ${{ steps.report-url.outputs.url }}
