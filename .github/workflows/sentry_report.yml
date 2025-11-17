@@ -2,7 +2,7 @@ name: Weekly Sentry Report
 
 on:
   schedule:
-    # 12:00 по Тбилиси → 08:00 UTC
+    # 12:00 Тбилиси = 08:00 UTC
     - cron: "0 8 * * MON"
   workflow_dispatch: {}
 
@@ -30,27 +30,28 @@ jobs:
           SENTRY_QUERY: ${{ secrets.SENTRY_QUERY }}
         run: python sentry_export.py
 
-      - name: Upload report as artifact
+      - name: Upload artifact (CSV Report)
         uses: actions/upload-artifact@v4
         with:
           name: sentry-report
           path: report/
 
-      - name: Create artifact download URL
+      - name: Resolve artifact download URL
         id: artifact-url
         uses: actions/upload-artifact/resolve-download-url@v1
         with:
           name: sentry-report
 
-      - name: Send message to Slack
+      - name: Send Slack notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           ARTIFACT_URL: ${{ steps.artifact-url.outputs.download_url }}
         run: |
           curl -X POST -H 'Content-type: application/json' \
           --data "{
-            \"text\": \"📊 *Weekly Sentry Report is ready!*\n⬇️ Download CSV report:\n${ARTIFACT_URL}\"
+            \"text\": \"📊 *Weekly Sentry Report Ready*\n📁 Download CSV:\n${ARTIFACT_URL}\"
           }" \
           $SLACK_WEBHOOK_URL
+
 
 
