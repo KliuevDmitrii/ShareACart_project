@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Generate Sentry CSV report
+      - name: Generate report
         env:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
@@ -29,32 +29,40 @@ jobs:
           SENTRY_QUERY: ${{ secrets.SENTRY_QUERY }}
         run: python sentry_export.py
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sentry-report
-          path: report/
-
-      - name: Get artifact ID
-        id: artifact-id
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ARTIFACT_ID=$(gh api repos/${{ github.repository }}/actions/artifacts --jq '.artifacts[0].id')
-          echo "id=$ARTIFACT_ID" >> $GITHUB_OUTPUT
+        with:
+          tag_name: sentry-report-${{ github.run_id }}
+          release_name: "Sentry Report ${{ github.run_id }}"
+          body: "Weekly Sentry Errors Report"
+          draft: false
+          prerelease: false
 
-      - name: Build artifact download URL
-        id: build-url
-        run: |
-          echo "url=https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${{ steps.artifact-id.outputs.id }}/zip" >> $GITHUB_OUTPUT
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: report/sentry_report_*.csv
+          asset_name: sentry_report.csv
+          asset_content_type: text/csv
 
-      - name: Send Slack notification
+      - name: Build URL to CSV
+        id: report-url
+        run: |
+          echo "url=https://github.com/${{ github.repository }}/releases/download/sentry-report-${{ github.run_id }}/sentry_report.csv" >> $GITHUB_OUTPUT
+
+      - name: Send Slack message
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          REPORT_URL: ${{ steps.build-url.outputs.url }}
+          REPORT_URL: ${{ steps.report-url.outputs.url }}
         run: |
-          curl -X POST -H "Content-type: application/json" \
+          curl -X POST -H 'Content-type: application/json' \
           --data "{
-            \"text\": \"📊 *Weekly Sentry Report Ready*\n📁 Download report:\n${REPORT_URL}\"
+            \"text\": \"📊 *Weekly Sentry Report Ready*\n📁 Download CSV:\n${REPORT_URL}\"
           }" \
           $SLACK_WEBHOOK_URL
