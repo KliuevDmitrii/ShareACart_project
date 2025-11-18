@@ -53,6 +53,17 @@ jobs:
           echo "Found file: $FILE_PATH"
 
       # ===========================
+      # EXTRACT FILENAME WITHOUT EXTENSION
+      # ===========================
+      - name: Extract filename
+        id: date_range
+        run: |
+          BASE=$(basename "${{ steps.find_csv.outputs.file }}")
+          NAME="${BASE%.*}"
+          echo "filename=$NAME" >> $GITHUB_OUTPUT
+          echo "Filename extracted: $NAME"
+
+      # ===========================
       # DELETE OLD RELEASES
       # ===========================
       - name: Delete old releases
@@ -75,12 +86,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: "sentry-report-${{ github.run_id }}"
-          release_name: "Sentry Report – ${{ github.run_id }}"
+          release_name: "Sentry Report – ${{ steps.date_range.outputs.filename }}"
           draft: false
           prerelease: false
 
       # ===========================
-      # UPLOAD ASSET TO RELEASE
+      # UPLOAD RELEASE ASSET (with dynamic filename)
       # ===========================
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -89,7 +100,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ${{ steps.find_csv.outputs.file }}
-          asset_name: sentry_report.csv
+          asset_name: ${{ steps.date_range.outputs.filename }}.csv
           asset_content_type: text/csv
 
       # ===========================
@@ -98,17 +109,18 @@ jobs:
       - name: Build URL to CSV
         id: report_url
         run: |
-          echo "url=https://github.com/${{ github.repository }}/releases/download/sentry-report-${{ github.run_id }}/sentry_report.csv" >> $GITHUB_OUTPUT
+          echo "url=https://github.com/${{ github.repository }}/releases/download/sentry-report-${{ github.run_id }}/${{ steps.date_range.outputs.filename }}.csv" >> $GITHUB_OUTPUT
+          echo "Public URL: https://github.com/${{ github.repository }}/releases/download/sentry-report-${{ github.run_id }}/${{ steps.date_range.outputs.filename }}.csv"
 
       # ===========================
-      # SEND SLACK BLOCK KIT MESSAGE
+      # SEND SLACK MESSAGE (non-interactive button)
       # ===========================
       - name: Send Slack notification (Block Kit)
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           REPORT_URL: ${{ steps.report_url.outputs.url }}
         run: |
-          curl -X POST -H 'Content-type: application/json' \
+          curl -X POST -H "Content-type: application/json" \
           --data "{
             \"blocks\": [
               {
@@ -134,12 +146,10 @@ jobs:
                       \"type\": \"plain_text\",
                       \"text\": \"⬇️ Download CSV\"
                     },
-                    \"url\": \"${REPORT_URL}\",
-                    \"style\": \"primary\"
+                    \"url\": \"${REPORT_URL}\"
                   }
                 ]
               }
             ]
           }" \
           $SLACK_WEBHOOK_URL
-
