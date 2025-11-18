@@ -120,7 +120,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           REPORT_URL: ${{ steps.report_url.outputs.url }}
         run: |
-          curl -X POST -H "Content-type: application/json" \
+          curl -X POST -H 'Content-type: application/json' \
           --data "{
             \"blocks\": [
               {
@@ -146,7 +146,8 @@ jobs:
                       \"type\": \"plain_text\",
                       \"text\": \"⬇️ Download CSV\"
                     },
-                    \"url\": \"${REPORT_URL}\"
+                    \"url\": \"${REPORT_URL}\",
+                    \"style\": \"primary\"
                   }
                 ]
               }
