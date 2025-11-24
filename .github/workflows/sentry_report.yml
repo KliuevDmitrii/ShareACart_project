@@ -2,8 +2,8 @@ name: Weekly Sentry Report
 
 on:
   schedule:
-    # 12:00 Tbilisi = 08:00 UTC
-    - cron: "0 8 * * MON"
+    # 11:00 Tbilisi = 07:00 UTC
+    - cron: "0 7 * * MON"
   workflow_dispatch: {}
 
 permissions:
