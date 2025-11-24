@@ -5,3 +5,6 @@ SENTRY_TOKEN=xxxx
 SENTRY_QUERY=your_sentry_query
 
 SLACK_WEBHOOK_URL=you_webhook_slack
+
+REPORT_DAYS=7
+RELEASES_LIMIT=2
