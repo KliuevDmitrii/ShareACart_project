@@ -1,6 +1,9 @@
-name: Weekly Sentry Report (Manual Run)
+name: Weekly Sentry Report
 
 on:
+  schedule:
+    # 11:00 Tbilisi = 07:00 UTC
+    - cron: "0 7 * * MON"
   workflow_dispatch: {}
 
 permissions:
@@ -88,7 +91,7 @@ jobs:
           prerelease: false
 
       # ===========================
-      # UPLOAD RELEASE ASSET (dynamic filename)
+      # UPLOAD RELEASE ASSET (with dynamic filename)
       # ===========================
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -107,9 +110,10 @@ jobs:
         id: report_url
         run: |
           echo "url=https://github.com/${{ github.repository }}/releases/download/sentry-report-${{ github.run_id }}/${{ steps.date_range.outputs.filename }}.csv" >> $GITHUB_OUTPUT
+          echo "Public URL: https://github.com/${{ github.repository }}/releases/download/sentry-report-${{ github.run_id }}/${{ steps.date_range.outputs.filename }}.csv"
 
       # ===========================
-      # SEND SLACK MESSAGE
+      # SEND SLACK MESSAGE (non-interactive button)
       # ===========================
       - name: Send Slack notification (Block Kit)
         env:
