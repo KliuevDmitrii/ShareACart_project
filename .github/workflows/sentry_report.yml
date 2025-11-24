@@ -1,7 +1,7 @@
 name: Weekly Sentry Report (Manual Run)
 
 on:
-  workflow_dispatch: {}   # запуск только вручную
+  workflow_dispatch: {}
 
 permissions:
   contents: write   # required for creating & deleting releases
