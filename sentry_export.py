@@ -120,13 +120,19 @@ def fetch_issues(start_date, end_date, releases=None):
 
 
 def get_vendor(issue):
-    """Extract vendor name from issue metadata."""
-    vendor = issue.get("metadata", {}).get("type", "")
+    """Extract vendor name from issue metadata and normalize it."""
+    vendor_raw = issue.get("metadata", {}).get("type", "")
 
-    if not vendor or vendor.lower() in EXCLUDE:
+    if not vendor_raw:
+        return None
+
+    vendor = vendor_raw.strip().lower()   # normalize
+
+    if vendor in EXCLUDE:
         return None
 
     return vendor
+
 
 
 def process_issues(issues):
@@ -177,16 +183,18 @@ def save_report(vendors, filename, stats_period):
         writer.writerow(["Rank", "Vendor", f"Events ({stats_period})", "Issues", "Messages"])
 
         for rank, (vendor, data) in enumerate(sorted_vendors, start=1):
+            pretty_vendor = vendor.capitalize()
             messages = "; ".join(sorted(set(data["Messages"])))
             writer.writerow([
                 rank,
-                vendor,
+                pretty_vendor,
                 data["Events"],
                 data["IssueCount"],
                 messages
             ])
 
     return sorted_vendors
+
 
 
 def main():
