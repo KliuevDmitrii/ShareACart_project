@@ -60,12 +60,62 @@ def parse_iso(dt_str: str) -> datetime | None:
         return None
 
 
+def semver_key(version: str) -> tuple:
+    """
+    Convert version string to a sortable key.
+    Supports forms like:
+      3
+      3.1
+      3.1.2
+      3.1.2.5
+      3.1.2-beta.1  (suffix ignored for ordering unless numbers equal; suffix makes it "lower")
+    Rules:
+      - Compare numeric parts left-to-right
+      - Missing parts treated as 0 (so 3.1 == 3.1.0)
+      - Pre-release (with '-') is considered LOWER than the same version without suffix
+    """
+    v = (version or "").strip()
+    # Split build metadata (+...) off
+    v = v.split("+", 1)[0]
+
+    # Detect pre-release
+    has_prerelease = "-" in v
+    base, _, prerelease = v.partition("-")
+
+    nums = []
+    for p in base.split("."):
+        try:
+            nums.append(int(p))
+        except ValueError:
+            # Non-numeric -> treat as 0, keeps sorting stable
+            nums.append(0)
+
+    # Normalize length (up to 4 parts to handle 3.0.6 style + extra)
+    while len(nums) < 4:
+        nums.append(0)
+    nums = nums[:4]
+
+    # prerelease flag: final release should sort higher than prerelease
+    # so use 1 for final, 0 for prerelease
+    final_flag = 0 if has_prerelease else 1
+
+    # If prerelease exists, try to extract numeric tail for better ordering (beta.2 > beta.1)
+    prerelease_num = 0
+    if has_prerelease and prerelease:
+        m = re.search(r"(\d+)", prerelease)
+        if m:
+            prerelease_num = int(m.group(1))
+
+    return (*nums, final_flag, prerelease_num)
+
+
 def get_latest_releases(limit: int, end_dt: datetime) -> list[str]:
     """
-    Fetch latest releases from Sentry that existed before end_dt (dateCreated <= end_dt).
-    This prevents selecting releases created AFTER the report period (which would yield 0 issues).
+    Variant B: pick latest releases by semantic version (semver-like),
+    not by creation date.
 
-    Also supports optional RELEASE_PREFIX filtering (default "3.").
+    Still excludes releases created AFTER report end (dateCreated > end_dt),
+    so the report won't become empty just because a new release appeared after the period.
     """
     url = f"https://sentry.io/api/0/projects/{ORG}/{PROJECT}/releases/?per_page=100"
     resp = requests.get(url, headers=headers)
@@ -78,7 +128,9 @@ def get_latest_releases(limit: int, end_dt: datetime) -> list[str]:
     if not isinstance(data, list):
         return []
 
-    eligible = []
+    eligible_versions: list[str] = []
+    version_to_created: dict[str, str] = {}
+
     for rel in data:
         version = (rel.get("version") or "").strip()
         created = parse_iso(rel.get("dateCreated"))
@@ -86,34 +138,29 @@ def get_latest_releases(limit: int, end_dt: datetime) -> list[str]:
         if not version or not created:
             continue
 
-        # IMPORTANT: only releases that existed before the report's end boundary
+        # Only releases that existed before the report's end boundary
         if created > end_dt:
             continue
 
-        # Optional prefix filter (helps exclude unrelated versions)
+        # Optional prefix filter
         if RELEASE_PREFIX and not version.startswith(RELEASE_PREFIX):
             continue
 
-        eligible.append(rel)
+        if version not in version_to_created:
+            eligible_versions.append(version)
+            version_to_created[version] = rel.get("dateCreated") or ""
 
-    # Sort newest-first by dateCreated
-    eligible.sort(key=lambda r: r.get("dateCreated") or "", reverse=True)
+    # Sort by semver (descending)
+    eligible_versions.sort(key=semver_key, reverse=True)
 
-    # Pick unique versions
-    versions: list[str] = []
-    for rel in eligible:
-        v = (rel.get("version") or "").strip()
-        if v and v not in versions:
-            versions.append(v)
-        if len(versions) >= limit:
-            break
+    picked = eligible_versions[:limit]
 
-    # Debug print (optional but helpful)
-    print("🧾 Releases preview (first 10 eligible by dateCreated <= report end):")
-    for rel in eligible[:10]:
-        print(rel.get("version"), rel.get("dateCreated"))
+    # Debug print: show top 10 by semver among eligible
+    print("🧾 Releases preview (top 10 eligible by SEMVER, dateCreated <= report end):")
+    for v in eligible_versions[:10]:
+        print(v, version_to_created.get(v))
 
-    return versions
+    return picked
 
 
 def build_query(start_dt: datetime, end_dt: datetime, releases: list[str] | None) -> tuple[str, str]:
@@ -125,15 +172,16 @@ def build_query(start_dt: datetime, end_dt: datetime, releases: list[str] | None
     if BASE_QUERY:
         query_parts.append(BASE_QUERY)
 
-    # Release filter (safe for 0/1/2)
+    # Release filter (safe for 0/1/2+)
     if releases:
         if len(releases) == 1:
             query_parts.append(f"release:{releases[0]}")
         else:
-            query_parts.append(f"release:[{releases[0]},{releases[1]}]")
+            # Use first N releases
+            joined = ",".join(releases)
+            query_parts.append(f"release:[{joined}]")
 
     # lastSeen bounds for inclusive period: start..yesterday
-    # end_dt is today 00:00, so yesterday = end_dt - 1 day
     query_parts.append(f"lastSeen:>={start_dt:%Y-%m-%d}")
     query_parts.append(f"lastSeen:<={(end_dt - timedelta(days=1)):%Y-%m-%d}")
 
@@ -258,7 +306,7 @@ def main():
 
     releases = get_latest_releases(limit=RELEASES_LIMIT, end_dt=end_date)
     if releases:
-        print(f"📦 Releases (<= report end): {releases}")
+        print(f"📦 Releases (SEMVER, <= report end): {releases}")
     else:
         print("⚠️ No eligible releases found for this report period. Running without release filter.")
 
